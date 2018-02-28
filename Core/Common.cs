@@ -144,6 +144,7 @@ from ID_troops import *";
         public static Operator FindOperator(int operatorCode) => Operators.ContainsKey(operatorCode) ?  Operators[operatorCode] : new Operator(operatorCode.ToString(CultureInfo.GetCultureInfo("en-US")), operatorCode);
 
         public static string InputPath { get; set; }
+	public static string InputFile { get; set; }
         public static string OutputPath { get; set; }
 
         public static string GetParam(ulong lParam)
@@ -739,6 +740,7 @@ from ID_troops import *";
         
 
         public static bool NeedId { get; set; } = true;
+	public static bool DecompileShaders { get; set; } = false;
         public static void GenerateId(string fileOut, IEnumerable<string> content, string prefix = "")
         {
             if (!NeedId || prefix == null || content == null) return;

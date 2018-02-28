@@ -19,7 +19,7 @@ namespace Decomp.Core
         {
             var fGroundSpecs = new Text(Path.Combine(Common.InputPath, "ground_specs.txt"));
             var fSource = new Win32FileWriter(Path.Combine(Common.OutputPath, "module_ground_specs.py"));
-            fSource.WriteLine(Header.Standard);
+	    fSource.WriteLine(Header.Standard);
             fSource.WriteLine(Header.GroundSpecs);
 
             int n = GetLexemsInFile(Path.Combine(Common.InputPath, "ground_specs.txt")) >> 3;  // / 8;

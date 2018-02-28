@@ -8,7 +8,6 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using Decomp.Core.Operators;
-using Decomp.Windows;
 
 namespace Decomp.Core
 {
@@ -22,11 +21,9 @@ namespace Decomp.Core
             return Path.GetDirectoryName(message.Substring(beginPos + 1, endPos - beginPos - 1));
         }
 
-        public static MainWindow Window { get; set; }
-
         private static string Status
         {
-            set => Window.StatusTextBlock.SetText(value);
+            set { Console.WriteLine(value); }
         }
 
         private static Thread _workThread = new Thread(Decompile);
@@ -43,22 +40,13 @@ namespace Decomp.Core
 
         public static void Decompile()
         {
-            Thread.CurrentThread.CurrentCulture = CultureInfo.GetCultureInfo(1033);
-            Thread.CurrentThread.CurrentUICulture = CultureInfo.GetCultureInfo(1033);
-
-            var sw = Stopwatch.StartNew();
-            Window.Print(Application.GetResource("LocalizationInitialization") + " ");
-
-            //Window.DecompileButton.SetContent("Decompile");
             Status = "";
 
-            InitializePath(out var isSingleFile);
+            bool isSingleFile = Common.InputFile != null;
 
             if (!File.Exists(Common.InputPath) && !Directory.Exists(Common.InputPath))
             {
-                Window.Print("\n" + Application.GetResource("LocalizationPleasePath"));
-                Window.DecompileButton.SetContent(Application.GetResource("LocalizationDecompile"));
-                Status = "";
+                Status = "Input file/directory `" + Common.InputPath + "` not found";
                 return;
             }
 
@@ -70,9 +58,7 @@ namespace Decomp.Core
                 }
                 catch
                 {
-                    Window.Print("\n" + Application.GetResource("LocalizationPleaseOutput"));
-                    Window.DecompileButton.SetContent(Application.GetResource("LocalizationDecompile"));
-                    Status = "";
+                    Status = "Unable to create the output directory `" + Common.OutputPath + "`";
                     return;
                 }
             }
@@ -85,7 +71,6 @@ namespace Decomp.Core
                 {
                     InitializeOpCodes();
                     InitializeModuleData();
-                    Common.NeedId = Window.GenerateIdFilesCheckBox.IsChecked();
                 }
                 else
                 {
@@ -95,39 +80,24 @@ namespace Decomp.Core
             }
             catch (FileNotFoundException ex)
             {
-                //Window.Print("\nFile \"{0}\" not found\nDecompilation Aborted", ex.FileName);
-                Window.Print("\n" + Application.GetResource("LocalizationFileNotFound"), ex.FileName);
-                Window.DecompileButton.SetContent(Application.GetResource("LocalizationDecompile"));
-                Status = "";
+                Status = "File not found `" + ex.FileName + "`";
                 return;
             }
             catch (DirectoryNotFoundException ex)
             {
-                Window.Print("\n" + Application.GetResource("LocalizationDirectoryNotFound"), ex.GetDirectory());
-                Window.DecompileButton.SetContent(Application.GetResource("LocalizationDecompile"));
-                Status = "";
+                Status = "Directory not found `" + ex.GetDirectory()  + "`";
                 return;
             }
             catch (ThreadAbortException)
             {
-                Window.Print(Application.GetResource("LocalizationDecompilationCanceled") + "\n");
-                Window.DecompileButton.SetContent(Application.GetResource("LocalizationDecompile"));
-                Status = "";
+                Status = "Decompilation canceled";
                 return;
             }
             catch (Exception e) 
             {
-                Window.Print($"\n{Application.GetResource("LocalizationFatalErrorDecompilationAborted")}\n");
-                Window.Print("{0}\n", e.Message);
-                Window.Print("{0}\n", e.StackTrace);
-                Window.DecompileButton.SetContent(Application.GetResource("LocalizationDecompile"));
-                Status = "";
+                Status = "Decompilation error:\n" + e.Message + "\n" + e.StackTrace;
                 return;
             }
-            
-            Window.Print(Application.GetResource("LocalizationTime") + "\n", sw.ElapsedTicks * 1000.0 / Stopwatch.Frequency);
-
-            var success = false;
 
 #if RELEASE
             try
@@ -137,76 +107,27 @@ namespace Decomp.Core
                     ProcessSingleFile();
                 else
                     ProcessFullModule();
-                success = true;
+
 #if RELEASE
             }
             catch (ThreadAbortException)
             {
-                Window.Print(Application.GetResource("LocalizationDecompilationCanceled") + "\n");
-                Window.DecompileButton.SetContent(Application.GetResource("LocalizationDecompile"));
-                Status = "";
+                Status = "Decompilation canceled";
                 return;
             }
             catch (Exception ex)
             {
-                Window.Print(Application.GetResource("LocalizationFatalErrorDecompilationAborted") + "\n");
-                Window.Print("{0}\n", ex.Message);
-                Window.Print("{0}\n", ex.StackTrace);
-
-                var errorWindowThread = new Thread(() =>
-                {
-                    var errorWindow = new ErrorWindow(ex);
-                    errorWindow.ShowDialog();
-                    Thread.CurrentThread.Abort();
-                    //_workThread.Resume();
-                });
-                errorWindowThread.SetApartmentState(ApartmentState.STA);
-                errorWindowThread.CurrentCulture = CultureInfo.GetCultureInfo(1033);
-                errorWindowThread.CurrentUICulture = CultureInfo.GetCultureInfo(1033);
-                errorWindowThread.Start();
-                //_workThread.Suspend();
+                Status = "Decompilation error:\n" + ex.Message + "\n" + ex.StackTrace;
             }
 #endif
 
-            Window.Print(Application.GetResource("LocalizationTotalTime") + "\n", sw.ElapsedTicks * 1000.0 / Stopwatch.Frequency);
-
-            if (Window.OpenAfterCompleteCheckBox.IsChecked() && success) Process.Start(Common.OutputPath);
-
-            Window.DecompileButton.SetContent(Application.GetResource("LocalizationDecompile"));
-            Status = "";
-        }
-
-        private static void InitializePath(out bool isSingleFile)
-        {
-            var x = false;
-            Window.Dispatcher?.Invoke(() =>
-            {
-                if (!File.Exists(Window.SourcePathTextBox.Text))
-                {
-                    Common.InputPath = Window.SourcePathTextBox.Text;
-                    x = false;
-                }
-                else
-                {
-                    Common.InputPath = Path.GetDirectoryName(Window.SourcePathTextBox.Text);
-                    x = true;
-                }
-                Common.OutputPath = Window.OutputPathTextBox.Text;
-
-                if (Common.InputPath != null && Common.InputPath[Common.InputPath.Length - 1] == '\\')
-                    Common.InputPath = Common.InputPath.Remove(Common.InputPath.Length - 1, 1);
-                if (Common.OutputPath[Common.OutputPath.Length - 1] == '\\')
-                    Common.OutputPath = Common.OutputPath.Remove(Common.OutputPath.Length - 1, 1);
-            });
-            isSingleFile = x;
+            Status = "Finished decompiling!";
         }
 
         private static void InitializeOpCodes()
         {
-            //Common.Operations = new Dictionary<long, string>();
-            //Common.Operators = new Dictionary<int, Operator>();
             var opCodes = new Dictionary<int, Operator>();
-            Window.ModeComboBox.Dispatcher?.Invoke(() => Common.SelectedMode = (Mode)Window.ModeComboBox.SelectedIndex);
+
             var operators = Operator.GetCollection(Common.SelectedMode);
             foreach (var op in operators) opCodes[op.Code] = op;
             Common.Operators = opCodes;
@@ -214,70 +135,70 @@ namespace Decomp.Core
 
         private static void InitializeModuleData()
         {
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} scripts.txt";
+            Status = $"Initializing scripts.txt";
             Common.Procedures = Scripts.Initialize();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} quick_strings.txt";
+            Status = "Initializing quick_strings.txt";
             Common.QuickStrings = QuickStrings.Initialize();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} strings.txt";
+            Status = "Initializing strings.txt";
             Common.Strings = Strings.Initialize();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} item_kinds1.txt";
-            Common.Items = Text.GetFirstStringFromFile(Common.InputPath + @"\item_kinds1.txt") == "itemsfile version 2"
-                ? Vanilla.Items.GetIdFromFile(Common.InputPath + @"\item_kinds1.txt") : Items.Initialize();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} troops.txt";
-            Common.Troops = Text.GetFirstStringFromFile(Common.InputPath + @"\troops.txt") == "troopsfile version 1"
-                ? Vanilla.Troops.GetIdFromFile(Common.InputPath + @"\troops.txt") : (Common.SelectedMode == Mode.Caribbean ?
+            Status = "Initializing item_kinds1.txt";
+            Common.Items = Text.GetFirstStringFromFile(Common.InputPath + "/item_kinds1.txt") == "itemsfile version 2"
+                ? Vanilla.Items.GetIdFromFile(Common.InputPath + "/item_kinds1.txt") : Items.Initialize();
+            Status = "Initializing troops.txt";
+            Common.Troops = Text.GetFirstStringFromFile(Common.InputPath + "/troops.txt") == "troopsfile version 1"
+                ? Vanilla.Troops.GetIdFromFile(Common.InputPath + "/troops.txt") : (Common.SelectedMode == Mode.Caribbean ?
                     Caribbean.Troops.Initialize() : Troops.Initialize());
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} factions.txt";
+            Status = "Initializing factions.txt";
             Common.Factions = Factions.Initialize();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} quests.txt";
+            Status = "Initializing quests.txt";
             Common.Quests = Quests.Initialize();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} party_templates.txt";
+            Status = "Initializing party_templates.txt";
             Common.PTemps = PartyTemplates.Initialize();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} parties.txt";
+            Status = "Initializing parties.txt";
             Common.Parties = Parties.Initialize();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} menus.txt";
+            Status = "Initializing menus.txt";
             Common.Menus = Menus.Initialize();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} sounds.txt";
+            Status = "Initializing sounds.txt";
             Common.Sounds = Sounds.Initialize();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} skills.txt";
+            Status = "Initializing skills.txt";
             Common.Skills = Skills.Initialize();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} meshes.txt";
+            Status = "Initializing meshes.txt";
             Common.Meshes = Meshes.Initialize();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} variables.txt";
+            Status = "Initializing variables.txt";
             Common.Variables = Scripts.InitializeVariables();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} dialog_states.txt";
+            Status = "Initializing dialog_states.txt";
             Common.DialogStates = Dialogs.Initialize();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} scenes.txt";
+            Status = "Initializing scenes.txt";
             Common.Scenes = Scenes.Initialize();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} mission_templates.txt";
+            Status = "Initializing mission_templates.txt";
             Common.MissionTemplates = MissionTemplates.Initialize();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} particle_systems.txt";
+            Status = "Initializing particle_systems.txt";
             Common.ParticleSystems = ParticleSystems.Initialize();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} scene_props.txt";
+            Status = "Initializing scene_props.txt";
             Common.SceneProps = SceneProps.Initialize();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} map_icons.txt";
+            Status = "Initializing map_icons.txt";
             Common.MapIcons = MapIcons.Initialize();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} presentations.txt";
+            Status = "Initializing presentations.txt";
             Common.Presentations = Presentations.Initialize();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} tableau_materials.txt";
+            Status = "Initializing tableau_materials.txt";
             Common.Tableaus = TableauMaterials.Initialize();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} actions.txt";
-            Common.Animations = Common.IsVanillaMode ? Vanilla.Animations.GetIdFromFile(Common.InputPath + @"\actions.txt") : Animations.Initialize();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} music.txt";
+            Status = "Initializing actions.txt";
+            Common.Animations = Common.IsVanillaMode ? Vanilla.Animations.GetIdFromFile(Common.InputPath + "/actions.txt") : Animations.Initialize();
+            Status = "Initializing music.txt";
             Common.Music = Music.Initialize();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} skins.txt";
+            Status = "Initializing skins.txt";
             Common.Skins = Common.SelectedMode == Mode.Caribbean ? 
                 Caribbean.Skins.Initialize() : Skins.Initialize();
-            Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} info_pages.txt";
+            Status = "Initializing info_pages.txt";
             Common.InfoPages = InfoPages.Initialize();
-            Status = Application.GetResource("LocalizationDecompilation");
+            Status = "Initializing finished";
         }
 
         private static void ProcessFile(string strFileName)
         {
             if (!File.Exists(Path.Combine(Common.InputPath, strFileName)))
             {
-                Window.Print(Application.GetResource("LocalizationFileNotFound2") + "\n", Common.InputPath, strFileName);
+                Status = "File not found " + Common.InputPath + "/" + strFileName;
                 return;
             }
 
@@ -288,7 +209,7 @@ namespace Decomp.Core
             var strFirstString = fInput.GetString();
             if (strFirstString == null)
             {
-                Window.Print(Application.GetResource("LocalizationUnknownFormat") + "\n");
+                Status = "Unknown file format";
                 return;
             }
             var bFirstNumber = Int32.TryParse(strFirstString, out var _);
@@ -372,16 +293,12 @@ namespace Decomp.Core
             else if (bFirstNumber && strFileName == "skyboxes.txt")
                 Skyboxes.Decompile();
             else 
-                Window.Print(Application.GetResource("LocalizationUnknownFormat") + "\n"); 
-
-            Window.Print(Application.GetResource("LocalizationFileTime") + "\n", strFileName, sw.ElapsedTicks * 1000.0 / Stopwatch.Frequency - dblTime);
+                Status = "Unknown format in " + Common.InputPath + "/" + strFileName;
         }
 
         private static string GetSingleFileName()
         {
-            string result = null;
-            Window.SourcePathTextBox.Dispatcher?.Invoke(() => result = Path.GetFileName(Window.SourcePathTextBox.Text));
-            return result;
+            return Path.GetFileName(Common.InputFile);
         }
 
         public static string GetShadersFullFileName(out bool founded)
@@ -402,17 +319,12 @@ namespace Decomp.Core
             var ext = Path.GetExtension(strFileName);
             if (ext == ".fx" || ext == ".fxo")
             {
-                var sw = Stopwatch.StartNew();
-                var dblTime = sw.ElapsedTicks * 1000.0 / Stopwatch.Frequency;
                 Shaders.Shaders.Decompile(Path.Combine(Common.InputPath, strFileName));
-                Window.Print(Application.GetResource("LocalizationFileTime") + "\n", strFileName, sw.ElapsedTicks * 1000.0 / Stopwatch.Frequency - dblTime);
                 return;
             }
 
             if (ext == ".brf")
             {
-                var sw = Stopwatch.StartNew();
-                var dblTime = sw.ElapsedTicks * 1000.0 / Stopwatch.Frequency;
                 switch (strFileName)
                 {
                     case "core_shaders.brf":
@@ -422,7 +334,6 @@ namespace Decomp.Core
                         WSE2.PhysicsMaterials.Decompile();
                         break;
                 }
-                Window.Print(Application.GetResource("LocalizationFileTime") + "\n", strFileName, sw.ElapsedTicks * 1000.0 / Stopwatch.Frequency - dblTime);
                 return;
             }
             
@@ -440,7 +351,7 @@ namespace Decomp.Core
         {
             File.Copy(Path.Combine(Common.InputPath, "variables.txt"), Path.Combine(Common.OutputPath, "variables.txt"), true);
 
-            var decompileShaders = Window.DecompileShadersCheckBox.IsChecked();
+            var decompileShaders = Common.DecompileShaders;
 
             if (!Common.IsVanillaMode)
                 Win32FileWriter.WriteAllText(Path.Combine(Common.OutputPath, "module_constants.py"), Header.Standard + Common.ModuleConstantsText);
@@ -467,23 +378,23 @@ namespace Decomp.Core
             {
                 ProcessFile(strModFile);
                 dblProgress += dblProgressForOneFile;
-                Status = $"{Application.GetResource("LocalizationDecompilation")} {dblProgress:F2}%";
+                Status = $"Decompiling {dblProgress:F2}%";
             }
 
             if (b && decompileShaders)
             {
                 ProcessShaders(sShadersFile);
                 dblProgress += dblProgressForOneFile;
-                Status = $"{Application.GetResource("LocalizationDecompilation")} {dblProgress:F2}%";
+                Status = $"Decompiling  {dblProgress:F2}%";
             }
 
             Common.InputPath = Path.Combine(Common.InputPath, "Data");
 
-            foreach (var strModDataFile in strModDataFiles.Where(strModDataFile => File.Exists(Common.InputPath + @"\" + strModDataFile)))
+            foreach (var strModDataFile in strModDataFiles.Where(strModDataFile => File.Exists(Common.InputPath + "/" + strModDataFile)))
             {
                 ProcessFile(strModDataFile);
                 dblProgress += dblProgressForOneFile;
-                Status = $"{Application.GetResource("LocalizationDecompilation")} {dblProgress:F2}%";
+                Status = $"Decompiling  {dblProgress:F2}%";
             }
         }
 
@@ -491,7 +402,6 @@ namespace Decomp.Core
         {
             var sw = Stopwatch.StartNew();
             Shaders.Shaders.Decompile(sShadersFile);
-            Window.Print(Application.GetResource("LocalizationFileTime") + "\n", Path.GetFileName(sShadersFile), sw.ElapsedTicks * 1000.0 / Stopwatch.Frequency);
         }
         
         private static readonly SimpleTrie<Action> InitializeTrie = new SimpleTrie<Action>
@@ -508,24 +418,22 @@ namespace Decomp.Core
             ["music.txt"] = () => { },
             ["particle_systems.txt"] = () => { },
             ["parties.txt"] = () => {
-                Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} troops.txt";
-                Common.Troops = Text.GetFirstStringFromFile(Common.InputPath + @"\troops.txt") == "troopsfile version 1"
-                    ? Vanilla.Troops.GetIdFromFile(Common.InputPath + @"\troops.txt") : Troops.Initialize();
-                Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} factions.txt";
+                Status = "Initializing troops.txt";
+                Common.Troops = Text.GetFirstStringFromFile(Common.InputPath + "/troops.txt") == "troopsfile version 1"
+                    ? Vanilla.Troops.GetIdFromFile(Common.InputPath + "/troops.txt") : Troops.Initialize();
+                Status = "Initializing factions.txt";
                 Common.Factions = Factions.Initialize();
-                Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} map_icons.txt";
+                Status = "Initializing map_icons.txt";
                 Common.MapIcons = MapIcons.Initialize();
-                Status = Application.GetResource("LocalizationDecompilation");
             },
             ["party_templates.txt"] = () => {
-                Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} troops.txt";
-                Common.Troops = Text.GetFirstStringFromFile(Common.InputPath + @"\troops.txt") == "troopsfile version 1"
-                    ? Vanilla.Troops.GetIdFromFile(Common.InputPath + @"\troops.txt") : Troops.Initialize();
-                Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} factions.txt";
+                Status = "Initializing troops.txt";
+                Common.Troops = Text.GetFirstStringFromFile(Common.InputPath + "/troops.txt") == "troopsfile version 1"
+                    ? Vanilla.Troops.GetIdFromFile(Common.InputPath + "/troops.txt") : Troops.Initialize();
+                Status = "Initializing factions.txt";
                 Common.Factions = Factions.Initialize();
-                Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} map_icons.txt";
+                Status = "Initializing map_icons.txt";
                 Common.MapIcons = MapIcons.Initialize();
-                Status = Application.GetResource("LocalizationDecompilation");
             },
             ["postfx.txt"] = () => { },
             ["presentations.txt"] = () => { InitializeOpCodes(); InitializeModuleData(); },
@@ -541,21 +449,20 @@ namespace Decomp.Core
             ["tableau_materials.txt"] = () => { InitializeOpCodes(); InitializeModuleData(); },
             ["triggers.txt"] = () => { InitializeOpCodes(); InitializeModuleData(); },
             ["troops.txt"] = () => {
-                Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} item_kinds1.txt";
-                Common.Items = Text.GetFirstStringFromFile(Common.InputPath + @"\item_kinds1.txt") == "itemsfile version 2"
-                    ? Vanilla.Items.GetIdFromFile(Common.InputPath + @"\item_kinds1.txt") : Items.Initialize();
-                Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} scenes.txt";
+                Status = "Initializing item_kinds1.txt";
+                Common.Items = Text.GetFirstStringFromFile(Common.InputPath + "/item_kinds1.txt") == "itemsfile version 2"
+                    ? Vanilla.Items.GetIdFromFile(Common.InputPath + "/item_kinds1.txt") : Items.Initialize();
+                Status = "Initializing scenes.txt";
                 Common.Scenes = Scenes.Initialize();
-                Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} skins.txt";
+                Status = "Initializing skins.txt";
                 Common.Skins = Skins.Initialize();
-                Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} factions.txt";
+                Status = "Initializing factions.txt";
                 Common.Factions = Factions.Initialize();
-                Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} skills.txt";
+                Status = "Initializing kills.txt";
                 Common.Skills = Skills.Initialize();
-                Status = $"{Application.GetResource("LocalizationDecompilation")} -- {Application.GetResource("LocalizationInitialization")} troops.txt";
-                Common.Troops = Text.GetFirstStringFromFile(Common.InputPath + @"\troops.txt") == "troopsfile version 1"
-                    ? Vanilla.Troops.GetIdFromFile(Common.InputPath + @"\troops.txt") : Troops.Initialize();
-                Status = Application.GetResource("LocalizationDecompilation");
+                Status = "Initializing troops.txt";
+                Common.Troops = Text.GetFirstStringFromFile(Common.InputPath + "/troops.txt") == "troopsfile version 1"
+                    ? Vanilla.Troops.GetIdFromFile(Common.InputPath + "/troops.txt") : Troops.Initialize();
             }
         };
     }
