@@ -141,10 +141,10 @@ from ID_troops import *";
 
         public static IReadOnlyDictionary<int, Operator> Operators { get; set; }
 
-        public static Operator FindOperator(int operatorCode) => Operators.ContainsKey(operatorCode) ?  Operators[operatorCode] : new Operator(operatorCode.ToString(CultureInfo.GetCultureInfo("en-US")), operatorCode);
+        public static Operator FindOperator(int operatorCode) => Operators.ContainsKey(operatorCode) ? Operators[operatorCode] : new Operator(operatorCode.ToString(CultureInfo.GetCultureInfo("en-US")), operatorCode);
 
         public static string InputPath { get; set; }
-	public static string InputFile { get; set; }
+        public static string InputFile { get; set; }
         public static string OutputPath { get; set; }
 
         public static string GetParam(ulong lParam)
@@ -294,7 +294,7 @@ from ID_troops import *";
         };
 
         public static string GetIndentations(int indentation) => new String(' ', Math.Max(indentation, 0) << 1);
-        
+
         public static void PrintStatement(ref Text fInput, ref Win32FileWriter fOutput, int iRecords, string strDefaultIndentation)
         {
             if (fInput == null) throw new ArgumentNullException(nameof(fInput));
@@ -303,7 +303,11 @@ from ID_troops import *";
             var indentations = 0;
             for (int r = 0; r < iRecords; r++)
             {
+                List<string> opList = new List<string>();
+                StringWriter statementWriter = new StringWriter();
+
                 var iOpCode = fInput.GetInt64();
+                opList.Add(iOpCode.ToString());
 
                 var strPrefixNeg = "";
                 if ((iOpCode & 0x80000000) != 0)
@@ -344,21 +348,29 @@ from ID_troops import *";
                             strOpCode = "le";
                             break;
                     }
-                    fOutput.Write("{0}{1}({2}{3}", strIdentations, strDefaultIndentation, strPrefixThisOrNext, strOpCode);
+                    statementWriter.Write("{0}{1}({2}{3}", strIdentations, strDefaultIndentation, strPrefixThisOrNext, strOpCode);
                 }
                 else
                 {
                     strOpCode = op.Value;
-                    fOutput.Write("{0}{1}({2}{3}{4}", strIdentations, strDefaultIndentation, strPrefixNeg, strPrefixThisOrNext, strOpCode);
+                    statementWriter.Write("{0}{1}({2}{3}{4}", strIdentations, strDefaultIndentation, strPrefixNeg, strPrefixThisOrNext, strOpCode);
                 }
-                
+
                 int iParams = fInput.GetInt();
+                opList.Add(iParams.ToString());
                 for (int p = 0; p < iParams; p++)
                 {
                     var strParam = fInput.GetWord();
-                    fOutput.Write(", {0}", op.GetParameter(p, strParam));
+                    opList.Add(strParam);
+                    statementWriter.Write(", {0}", op.GetParameter(p, strParam));
                 }
-                fOutput.WriteLine("),");
+
+                // join
+                string comment = string.Join(" ", opList);
+                fOutput.WriteLine("{0}{1}# {2}", strIdentations, strDefaultIndentation, comment);
+
+                statementWriter.Write("),");
+                fOutput.WriteLine(statementWriter.ToString());
 
             }
         }
@@ -548,7 +560,7 @@ from ID_troops import *";
             51 => "gk_order_8",
             _ => $"0x{lKeyCode:x}",
         };
-        
+
 
         public static bool IsStringRegister(ulong lParam)
         {
@@ -617,7 +629,7 @@ from ID_troops import *";
             return sbFlag.ToString();
         }
 
-        public static string GetAgentClass(ulong lClass) => lClass switch 
+        public static string GetAgentClass(ulong lClass) => lClass switch
         {
             0 => "grc_infantry",
             1 => "grc_archers",
@@ -657,7 +669,7 @@ from ID_troops import *";
             25 => "mordr_form_5_row",
             _ => lOrder.ToString(CultureInfo.GetCultureInfo(1033)),
         };
-        
+
 
         public static string GetPartyBehavior(ulong lBehavior)
         {
@@ -676,7 +688,7 @@ from ID_troops import *";
             3 => "ca_charisma",
             _ => lAttribute.ToString(CultureInfo.GetCultureInfo("en-US")),
         };
-        
+
 
         public static string GetWeaponProficiency(ulong lProficiency) => lProficiency switch
         {
@@ -704,8 +716,8 @@ from ID_troops import *";
             9 => "ek_food",
             _ => lSlot.ToString(CultureInfo.GetCultureInfo("en-US")),
         };
-        
-        
+
+
         public static string GetTooltip(ulong t) => t switch
         {
             1 => "tooltip_agent",
@@ -737,10 +749,10 @@ from ID_troops import *";
             0x11 => "sort_f_ci | sort_f_desc",
             _ => sm.ToString(CultureInfo.GetCultureInfo("en-US")),
         };
-        
+
 
         public static bool NeedId { get; set; } = true;
-	public static bool DecompileShaders { get; set; } = false;
+        public static bool DecompileShaders { get; set; } = false;
         public static void GenerateId(string fileOut, IEnumerable<string> content, string prefix = "")
         {
             if (!NeedId || prefix == null || content == null) return;
